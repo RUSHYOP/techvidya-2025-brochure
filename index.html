@@ -3,34 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TECHVIDYA 2K25 - Brochure</title>
+    <title>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</title>
     <style>
-        /* Use the same font as your main site */
-        @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
+        /* Use the new font */
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
 
         html, body {
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Hide scrollbars on the main page */
+            /* overflow: hidden; <-- This was removed to allow zooming */
             background-color: #0a0a0a; /* Black background */
-            font-family: 'Space Grotesk', sans-serif;
+            font-family: 'Oswald', sans-serif; /* Apply the new font */
             color: white;
             height: 100%;
             display: flex;
             flex-direction: column;
+
+            /* --- HIDE SCROLLBAR (Global) --- */
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none;  /* IE */
+        }
+
+        /* WebKit (Chrome, Safari, etc.) */
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar {
+            display: none;
         }
 
         header {
-            padding: 1rem 2rem;
+            padding: 2.5rem 2rem; /* Increased padding */
             text-align: center;
             border-bottom: 1px solid #222;
             z-index: 10;
+            
+            /* --- UPDATED FOR LOGO --- */
+            display: flex;
+            justify-content: center; /* Center the h1 */
+            align-items: center;
+            position: relative; /* Anchor for the logo */
+        }
+
+        /* --- NEW SVG LOGO STYLE --- */
+        .header-logo {
+            position: absolute;
+            left: 2rem; /* Aligns with header padding */
+            top: 50%;
+            transform: translateY(-50%); /* Vertically center */
+            width: 100px;  /* Increased */
+            height: 100px; /* Increased */
+            /* 'fill' property removed, as it's not needed for an <img> tag */
         }
 
         h1 {
             font-size: 1.5rem;
             font-weight: 500;
             margin: 0;
+            /* text-align: center is no longer needed */
         }
         
         /* This container will hold the PDF viewer */
@@ -38,6 +66,17 @@
             flex-grow: 1; /* Make it fill all available space */
             width: 100%;
             height: 100%; /* Fallback for older browsers */
+            /* Allow this container to scroll if the iframe content overflows */
+            overflow-y: auto; 
+
+            /* --- HIDE SCROLLBAR (Local) --- */
+            scrollbar-width: none;
+            -ms-overflow-style: none;  
+        }
+
+        /* WebKit (Chrome, Safari, etc.) */
+        .pdf-container::-webkit-scrollbar {
+            display: none;
         }
 
         iframe {
@@ -49,18 +88,22 @@
 </head>
 <body>
     <header>
-        <h1>TECHVIDYA 2K25 - Official Brochure</h1>
+        <!-- --- UPDATED SVG LOGO to use your file --- -->
+        <img src="./images/techvidya-logo.svg" alt="Techvidya Logo" class="header-logo">
+
+        <h1>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</h1>
     </header>
 
     <div class="pdf-container">
         <!-- 
-          IMPORTANT: 
-          1. Upload your brochure.pdf to the *same folder* as this file.
-          2. Change "brochure.pdf" to the name of your file.
+          FIX: 
+          1. Kept the "TechVidya-Broucher.pdf" src
+          2. Added scrolling="no" attribute to the iframe
         -->
-        <iframe src="brochure.pdf" type="application/pdf">
-            <p>Your browser does not support PDFs. <a href="brochure.pdf">Download the brochure here.</a></p>
+        <iframe src="./brochure/TechVidya-Broucher.pdf#toolbar=0&navpanes=0" type="application/pdf" scrolling="no">
+            <p>Your browser does not support PDFs. <a href="TechVidya-Broucher.pdf">Download the brochure here.</a></p>
         </iframe>
     </div>
 </body>
 </html>
+
