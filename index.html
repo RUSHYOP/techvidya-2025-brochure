@@ -84,14 +84,22 @@
             box-sizing: border-box;
         }
 
-        /* Style for each page (which will be a <canvas> element) */
-        #pdf-viewer canvas {
-            width: 90%; /* Make page slightly smaller than full width */
+        /* --- FIX FOR MOBILE CENTERING --- */
+        /* This is the wrapper for each page */
+        .page-wrapper {
+            width: 90%; /* Make wrapper slightly smaller than full width */
             max-width: 800px; /* Max width on desktop */
-            height: auto;
             margin-bottom: 1rem;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
         }
+
+        /* Style for each page (which will be a <canvas> element) */
+        .page-wrapper canvas {
+            width: 100%; /* Make canvas fill its wrapper */
+            height: auto;
+            display: block; /* Remove any extra spacing */
+        }
+        /* --- END FIX --- */
 
     </style>
 </head>
@@ -152,6 +160,7 @@
             for (let pageNum = 1; pageNum <= numPages; pageNum++) {
                 const canvasWrapper = document.createElement('div');
                 canvasWrapper.id = 'wrapper-' + pageNum;
+                canvasWrapper.className = 'page-wrapper'; // Apply styling
                 container.appendChild(canvasWrapper);
                 canvasWrappers.push(canvasWrapper);
             }
@@ -188,7 +197,8 @@
                                 // We scroll the whole container, not the canvas
                                 const pdfContainer = document.querySelector('.pdf-container');
                                 if (pdfContainer) {
-                                    pdfContainer.scrollTop = canvas.offsetTop - 20; // 20px buffer
+                                    // Scroll the wrapper into view
+                                    canvasWrappers[num - 1].scrollIntoView({ behavior: 'auto', block: 'start' });
                                 }
                             }
                         }).catch(renderErr => {
