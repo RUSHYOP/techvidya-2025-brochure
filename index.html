@@ -37,16 +37,18 @@
 
         header {
             padding: 2.5rem 2rem; /* Increased padding */
-            text-align: center;
             border-bottom: 1px solid #222;
             z-index: 10;
             
-            /* --- UPDATED FOR LOGO --- */
+            /* --- UPDATED FOR LOGO REMOVAL --- */
             display: flex;
             justify-content: center; /* Center the h1 */
             align-items: center;
-            position: relative; /* Anchor for the logo */
+            position: relative; 
+            text-align: center; /* Ensure title is centered */
         }
+
+        /* --- Logo styles removed --- */
 
         h1 {
             font-size: 1.5rem;
@@ -95,6 +97,7 @@
 </head>
 <body>
     <header>
+        <!-- Logo img tag removed -->
         <h1>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</h1>
     </header>
 
@@ -108,47 +111,69 @@
         // Set the worker source (required by PDF.js)
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-        // --- THIS IS THE FIX ---
-        // Your PDF file (assuming it's in the same folder)
-        const url = 'TechVidya-Broucher.pdf'; 
+        // Your PDF file (loading from your Cloudflare R2 bucket)
+        const url = 'https://pub-01b86a07b6904467a8a45ae0ec6c8c9e.r2.dev/TechVidya-Broucher.pdf'; 
 
         // Get the container
         const container = document.getElementById('pdf-viewer');
+        const loadingMessage = document.createElement('p');
+        loadingMessage.textContent = 'Loading Brochure...';
+        loadingMessage.style.textAlign = 'center';
+        loadingMessage.style.padding = '2rem';
+        container.appendChild(loadingMessage);
 
         // Asynchronously load the PDF
-        pdfjsLib.getDocument(url).promise.then(function(pdf) {
-            console.log('PDF loaded');
-            
-            // Loop through all the pages
-            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                
-                // Get each page
-                pdf.getPage(pageNum).then(function(page) {
-                    console.log('Page ' + pageNum + ' loaded');
-                    
-                    const scale = 1.5;
-                    const viewport = page.getViewport({ scale: scale });
+        const loadingTask = pdfjsLib.getDocument(url);
+        loadingTask.promise.then(function(pdf) {
+            console.log('PDF loaded successfully.');
+            loadingMessage.remove(); // Remove "Loading..." message
 
-                    // Create a canvas element for each page
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
+            // Get number of pages
+            const numPages = pdf.numPages;
+            console.log('Total Pages:', numPages);
 
-                    // Append the canvas to the container *before* rendering
-                    container.appendChild(canvas);
+            // Create a chain of promises to render pages sequentially
+            let pagePromise = Promise.resolve();
+            for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                // Chain promises
+                pagePromise = pagePromise.then(function() {
+                    return pdf.getPage(pageNum).then(function(page) {
+                        console.log('Rendering page', pageNum);
+                        
+                        const scale = 1.5;
+                        const viewport = page.getViewport({ scale: scale });
 
-                    // Render the page into the canvas
-                    const renderContext = {
-                        canvasContext: context,
-                        viewport: viewport
-                    };
-                    page.render(renderContext);
+                        // Create a canvas element for each page
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        // Append the canvas to the container *before* rendering
+                        container.appendChild(canvas);
+
+                        // Render the page into the canvas
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+                        
+                        return page.render(renderContext).promise.then(() => {
+                            console.log('Page', pageNum, 'rendered');
+                        }).catch(renderErr => {
+                            console.error('Error rendering page ' + pageNum, renderErr);
+                        });
+                    }).catch(pageErr => {
+                        console.error('Error loading page ' + pageNum, pageErr);
+                    });
                 });
             }
-        }, function (reason) {
+            return pagePromise;
+
+        }).catch(function (reason) {
             // PDF loading error
-            console.error(reason);
+            console.error('Error loading PDF:', reason);
+            loadingMessage.remove(); // Remove "Loading..." message
             container.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Error loading PDF. Please try <a href="' + url + '" style="color: #87CEEB;">downloading it directly</a>.</p>';
         });
     </script>
