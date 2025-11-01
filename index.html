@@ -122,13 +122,12 @@
         loadingMessage.style.padding = '2rem';
         container.appendChild(loadingMessage);
 
-        // --- NEW: Get target page from URL ---
+        // --- Get target page from URL ---
         const params = new URLSearchParams(window.location.search);
         let targetPageNum = parseInt(params.get('page'), 10);
         if (isNaN(targetPageNum) || targetPageNum < 1) {
             targetPageNum = 1; // Default to page 1
         }
-        // --- END NEW LOGIC ---
 
         // Asynchronously load the PDF
         const loadingTask = pdfjsLib.getDocument(url);
@@ -140,62 +139,73 @@
             const numPages = pdf.numPages;
             console.log('Total Pages:', numPages);
 
-            // --- NEW: Validate targetPageNum ---
             if (targetPageNum > numPages) {
                 targetPageNum = numPages;
             }
 
-            // Create a chain of promises to render pages sequentially
-            let pagePromise = Promise.resolve();
+            // --- NEW: Render pages in parallel ---
+            const pagePromises = [];
+
             for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-                // Chain promises
-                pagePromise = pagePromise.then(function() {
-                    return pdf.getPage(pageNum).then(function(page) {
-                        console.log('Rendering page', pageNum);
+                // Create a function to handle rendering for each page
+                const renderPage = (num) => {
+                    return pdf.getPage(num).then(function(page) {
+                        console.log('Loading page', num);
                         
                         const scale = 1.5;
                         const viewport = page.getViewport({ scale: scale });
 
-                        // Create a canvas element for each page
                         const canvas = document.createElement('canvas');
-                        
-                        // --- NEW: Add ID for jumping ---
-                        canvas.id = 'page-canvas-' + pageNum;
-
+                        canvas.id = 'page-canvas-' + num; // Add ID for jumping
                         const context = canvas.getContext('2d');
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
 
-                        // Append the canvas to the container *before* rendering
-                        container.appendChild(canvas);
+                        // IMPORTANT: Add canvas to DOM *before* rendering
+                        // To keep them in order, we create placeholder divs
+                        const canvasWrapper = document.createElement('div');
+                        canvasWrapper.id = 'wrapper-' + num;
+                        canvasWrapper.appendChild(canvas);
+                        container.appendChild(canvasWrapper);
 
-                        // Render the page into the canvas
                         const renderContext = {
                             canvasContext: context,
                             viewport: viewport
                         };
                         
                         return page.render(renderContext).promise.then(() => {
-                            console.log('Page', pageNum, 'rendered');
+                            console.log('Page', num, 'rendered');
                             
-                            // --- NEW: JUMP-ON-RENDER LOGIC ---
-                            // If this is the page we were looking for, scroll to it now.
-                            if (pageNum === targetPageNum) {
+                            // JUMP-ON-RENDER LOGIC
+                            if (num === targetPageNum) {
                                 console.log('Scrolling to target page:', targetPageNum);
-                                // Use scrollIntoView for a direct jump
                                 canvas.scrollIntoView({ behavior: 'auto', block: 'start' });
                             }
-                            // --- END JUMP LOGIC ---
-
                         }).catch(renderErr => {
-                            console.error('Error rendering page ' + pageNum, renderErr);
+                            console.error('Error rendering page ' + num, renderErr);
                         });
                     }).catch(pageErr => {
-                        console.error('Error loading page ' + pageNum, pageErr);
+                        console.error('Error loading page ' + num, pageErr);
                     });
-                });
+                };
+                
+                pagePromises.push(renderPage(pageNum));
             }
-            return pagePromise;
+            
+            // Wait for all render promises to complete
+            Promise.all(pagePromises).then(() => {
+                console.log('All pages have been processed.');
+                // Fix page order just in case parallel loading messes it up
+                // (This is a failsafe)
+                const wrappers = Array.from(container.children);
+                wrappers.sort((a, b) => {
+                    const aNum = parseInt(a.id.split('-')[1], 10);
+                    const bNum = parseInt(b.id.split('-')[1], 10);
+                    return aNum - bNum;
+                });
+                wrappers.forEach(wrapper => container.appendChild(wrapper));
+            });
+            // --- END NEW LOGIC ---
 
         }).catch(function (reason) {
             // PDF loading error
