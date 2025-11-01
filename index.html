@@ -145,6 +145,10 @@
 
                         // Create a canvas element for each page
                         const canvas = document.createElement('canvas');
+                        
+                        // --- NEW: Add an ID to each canvas ---
+                        canvas.id = `page-canvas-${pageNum}`;
+                        
                         const context = canvas.getContext('2d');
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
@@ -170,6 +174,34 @@
             }
             return pagePromise;
 
+        }).then(() => {
+            // --- NEW: This block runs *after* all pages are rendered ---
+            console.log('All pages rendered. Checking for page parameter...');
+            
+            // Get URL parameters
+            const params = new URLSearchParams(window.location.search);
+            const pageToScroll = params.get('page'); // e.g., ?page=5
+            
+            if (pageToScroll) {
+                console.log('Found page parameter:', pageToScroll);
+                const pageNum = parseInt(pageToScroll, 10);
+                if (!isNaN(pageNum)) {
+                    // Find the canvas we created
+                    const targetCanvas = document.getElementById(`page-canvas-${pageNum}`);
+                    if (targetCanvas) {
+                        console.log('Scrolling to', targetCanvas.id);
+                        // Use setTimeout to make sure the browser has drawn the page
+                        setTimeout(() => {
+                            targetCanvas.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start'
+                            });
+                        }, 100); // 100ms delay for safety
+                    } else {
+                        console.warn('Could not find canvas for page', pageNum);
+                    }
+                }
+            }
         }).catch(function (reason) {
             // PDF loading error
             console.error('Error loading PDF:', reason);
