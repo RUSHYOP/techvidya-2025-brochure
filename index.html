@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TECHVIDYA 2K25 - Brochure</title>
+    <style>
+        /* Use the same font as your main site */
+        @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Hide scrollbars on the main page */
+            background-color: #0a0a0a; /* Black background */
+            font-family: 'Space Grotesk', sans-serif;
+            color: white;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 1rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid #222;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin: 0;
+        }
+        
+        /* This container will hold the PDF viewer */
+        .pdf-container {
+            flex-grow: 1; /* Make it fill all available space */
+            width: 100%;
+            height: 100%; /* Fallback for older browsers */
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>TECHVIDYA 2K25 - Official Brochure</h1>
+    </header>
+
+    <div class="pdf-container">
+        <!-- 
+          IMPORTANT: 
+          1. Upload your brochure.pdf to the *same folder* as this file.
+          2. Change "brochure.pdf" to the name of your file.
+        -->
+        <iframe src="brochure.pdf" type="application/pdf">
+            <p>Your browser does not support PDFs. <a href="brochure.pdf">Download the brochure here.</a></p>
+        </iframe>
+    </div>
+</body>
+</html>
