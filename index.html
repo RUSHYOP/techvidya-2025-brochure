@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</title>
+    
+    <!-- 1. Load the PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
+
     <style>
         /* Use the new font */
         @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
@@ -43,22 +48,10 @@
             position: relative; /* Anchor for the logo */
         }
 
-        /* --- NEW SVG LOGO STYLE --- */
-        .header-logo {
-            position: absolute;
-            left: 2rem; /* Aligns with header padding */
-            top: 50%;
-            transform: translateY(-50%); /* Vertically center */
-            width: 100px;  /* Increased */
-            height: 100px; /* Increased */
-            /* 'fill' property removed, as it's not needed for an <img> tag */
-        }
-
         h1 {
             font-size: 1.5rem;
             font-weight: 500;
             margin: 0;
-            /* text-align: center is no longer needed */
         }
         
         /* This container will hold the PDF viewer */
@@ -66,8 +59,7 @@
             flex-grow: 1; /* Make it fill all available space */
             width: 100%;
             height: 100%; /* Fallback for older browsers */
-            /* Allow this container to scroll if the iframe content overflows */
-            overflow-y: auto; 
+            overflow-y: auto; /* Allow this container to scroll */
 
             /* --- HIDE SCROLLBAR (Local) --- */
             scrollbar-width: none;
@@ -79,31 +71,87 @@
             display: none;
         }
 
-        iframe {
+        /* --- NEW STYLES FOR PDF.JS --- */
+        /* This is the new container for the PDF pages */
+        #pdf-viewer {
             width: 100%;
-            height: 100%;
-            border: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Center pages horizontally */
+            padding: 1rem 0;
+            box-sizing: border-box;
         }
+
+        /* Style for each page (which will be a <canvas> element) */
+        #pdf-viewer canvas {
+            width: 90%; /* Make page slightly smaller than full width */
+            max-width: 800px; /* Max width on desktop */
+            height: auto;
+            margin-bottom: 1rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
     </style>
 </head>
 <body>
     <header>
-        <!-- --- UPDATED SVG LOGO to use your file --- -->
-        <img src="./images/techvidya-logo.svg" alt="Techvidya Logo" class="header-logo">
-
         <h1>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</h1>
     </header>
 
+    <!-- 2. This is where the PDF pages will be rendered -->
     <div class="pdf-container">
-        <!-- 
-          FIX: 
-          1. Kept the "TechVidya-Broucher.pdf" src
-          2. Added scrolling="no" attribute to the iframe
-        -->
-        <iframe src="./brochure/TechVidya-Broucher.pdf#toolbar=0&navpanes=0" type="application/pdf" scrolling="no">
-            <p>Your browser does not support PDFs. <a href="TechVidya-Broucher.pdf">Download the brochure here.</a></p>
-        </iframe>
+        <div id="pdf-viewer"></div>
     </div>
+
+    <!-- 3. This script loads and renders your PDF -->
+    <script>
+        // Set the worker source (required by PDF.js)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        // --- THIS IS THE FIX ---
+        // Your PDF file (assuming it's in the same folder)
+        const url = 'TechVidya-Broucher.pdf'; 
+
+        // Get the container
+        const container = document.getElementById('pdf-viewer');
+
+        // Asynchronously load the PDF
+        pdfjsLib.getDocument(url).promise.then(function(pdf) {
+            console.log('PDF loaded');
+            
+            // Loop through all the pages
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                
+                // Get each page
+                pdf.getPage(pageNum).then(function(page) {
+                    console.log('Page ' + pageNum + ' loaded');
+                    
+                    const scale = 1.5;
+                    const viewport = page.getViewport({ scale: scale });
+
+                    // Create a canvas element for each page
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    // Append the canvas to the container *before* rendering
+                    container.appendChild(canvas);
+
+                    // Render the page into the canvas
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    page.render(renderContext);
+                });
+            }
+        }, function (reason) {
+            // PDF loading error
+            console.error(reason);
+            container.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Error loading PDF. Please try <a href="' + url + '" style="color: #87CEEB;">downloading it directly</a>.</p>';
+        });
+    </script>
 </body>
 </html>
 
