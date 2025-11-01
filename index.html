@@ -143,8 +143,18 @@
                 targetPageNum = numPages;
             }
 
-            // --- NEW: Render pages in parallel ---
+            // --- Render pages in parallel ---
             const pagePromises = [];
+
+            // --- Create all canvas wrappers first to maintain order ---
+            // This is the key fix: create placeholders first.
+            const canvasWrappers = [];
+            for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                const canvasWrapper = document.createElement('div');
+                canvasWrapper.id = 'wrapper-' + pageNum;
+                container.appendChild(canvasWrapper);
+                canvasWrappers.push(canvasWrapper);
+            }
 
             for (let pageNum = 1; pageNum <= numPages; pageNum++) {
                 // Create a function to handle rendering for each page
@@ -161,12 +171,8 @@
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
 
-                        // IMPORTANT: Add canvas to DOM *before* rendering
-                        // To keep them in order, we create placeholder divs
-                        const canvasWrapper = document.createElement('div');
-                        canvasWrapper.id = 'wrapper-' + num;
-                        canvasWrapper.appendChild(canvas);
-                        container.appendChild(canvasWrapper);
+                        // Add the canvas to its specific placeholder wrapper
+                        canvasWrappers[num - 1].appendChild(canvas);
 
                         const renderContext = {
                             canvasContext: context,
@@ -179,7 +185,11 @@
                             // JUMP-ON-RENDER LOGIC
                             if (num === targetPageNum) {
                                 console.log('Scrolling to target page:', targetPageNum);
-                                canvas.scrollIntoView({ behavior: 'auto', block: 'start' });
+                                // We scroll the whole container, not the canvas
+                                const pdfContainer = document.querySelector('.pdf-container');
+                                if (pdfContainer) {
+                                    pdfContainer.scrollTop = canvas.offsetTop - 20; // 20px buffer
+                                }
                             }
                         }).catch(renderErr => {
                             console.error('Error rendering page ' + num, renderErr);
@@ -195,17 +205,8 @@
             // Wait for all render promises to complete
             Promise.all(pagePromises).then(() => {
                 console.log('All pages have been processed.');
-                // Fix page order just in case parallel loading messes it up
-                // (This is a failsafe)
-                const wrappers = Array.from(container.children);
-                wrappers.sort((a, b) => {
-                    const aNum = parseInt(a.id.split('-')[1], 10);
-                    const bNum = parseInt(b.id.split('-')[1], 10);
-                    return aNum - bNum;
-                });
-                wrappers.forEach(wrapper => container.appendChild(wrapper));
+                // --- Re-sorting logic REMOVED to prevent jump-back ---
             });
-            // --- END NEW LOGIC ---
 
         }).catch(function (reason) {
             // PDF loading error
