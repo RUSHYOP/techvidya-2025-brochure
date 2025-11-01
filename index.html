@@ -122,6 +122,14 @@
         loadingMessage.style.padding = '2rem';
         container.appendChild(loadingMessage);
 
+        // --- NEW: Get target page from URL ---
+        const params = new URLSearchParams(window.location.search);
+        let targetPageNum = parseInt(params.get('page'), 10);
+        if (isNaN(targetPageNum) || targetPageNum < 1) {
+            targetPageNum = 1; // Default to page 1
+        }
+        // --- END NEW LOGIC ---
+
         // Asynchronously load the PDF
         const loadingTask = pdfjsLib.getDocument(url);
         loadingTask.promise.then(function(pdf) {
@@ -131,6 +139,11 @@
             // Get number of pages
             const numPages = pdf.numPages;
             console.log('Total Pages:', numPages);
+
+            // --- NEW: Validate targetPageNum ---
+            if (targetPageNum > numPages) {
+                targetPageNum = numPages;
+            }
 
             // Create a chain of promises to render pages sequentially
             let pagePromise = Promise.resolve();
@@ -146,9 +159,9 @@
                         // Create a canvas element for each page
                         const canvas = document.createElement('canvas');
                         
-                        // --- NEW: Add an ID to each canvas ---
-                        canvas.id = `page-canvas-${pageNum}`;
-                        
+                        // --- NEW: Add ID for jumping ---
+                        canvas.id = 'page-canvas-' + pageNum;
+
                         const context = canvas.getContext('2d');
                         canvas.height = viewport.height;
                         canvas.width = viewport.width;
@@ -164,6 +177,16 @@
                         
                         return page.render(renderContext).promise.then(() => {
                             console.log('Page', pageNum, 'rendered');
+                            
+                            // --- NEW: JUMP-ON-RENDER LOGIC ---
+                            // If this is the page we were looking for, scroll to it now.
+                            if (pageNum === targetPageNum) {
+                                console.log('Scrolling to target page:', targetPageNum);
+                                // Use scrollIntoView for a direct jump
+                                canvas.scrollIntoView({ behavior: 'auto', block: 'start' });
+                            }
+                            // --- END JUMP LOGIC ---
+
                         }).catch(renderErr => {
                             console.error('Error rendering page ' + pageNum, renderErr);
                         });
@@ -174,34 +197,6 @@
             }
             return pagePromise;
 
-        }).then(() => {
-            // --- NEW: This block runs *after* all pages are rendered ---
-            console.log('All pages rendered. Checking for page parameter...');
-            
-            // Get URL parameters
-            const params = new URLSearchParams(window.location.search);
-            const pageToScroll = params.get('page'); // e.g., ?page=5
-            
-            if (pageToScroll) {
-                console.log('Found page parameter:', pageToScroll);
-                const pageNum = parseInt(pageToScroll, 10);
-                if (!isNaN(pageNum)) {
-                    // Find the canvas we created
-                    const targetCanvas = document.getElementById(`page-canvas-${pageNum}`);
-                    if (targetCanvas) {
-                        console.log('Scrolling to', targetCanvas.id);
-                        // Use setTimeout to make sure the browser has drawn the page
-                        setTimeout(() => {
-                            targetCanvas.scrollIntoView({
-                                behavior: 'smooth',
-                                block: 'start'
-                            });
-                        }, 100); // 100ms delay for safety
-                    } else {
-                        console.warn('Could not find canvas for page', pageNum);
-                    }
-                }
-            }
         }).catch(function (reason) {
             // PDF loading error
             console.error('Error loading PDF:', reason);
