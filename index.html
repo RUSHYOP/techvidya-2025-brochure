@@ -5,50 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</title>
     
-    <!-- 1. Load the PDF.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
 
     <style>
-        /* Use the new font */
         @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
 
         html, body {
             margin: 0;
             padding: 0;
-            /* overflow: hidden; <-- This was removed to allow zooming */
-            background-color: #0a0a0a; /* Black background */
-            font-family: 'Oswald', sans-serif; /* Apply the new font */
+            background-color: #0a0a0a;
+            font-family: 'Oswald', sans-serif;
             color: white;
             height: 100%;
             display: flex;
             flex-direction: column;
-
-            /* --- HIDE SCROLLBAR (Global) --- */
-            scrollbar-width: none; /* Firefox */
-            -ms-overflow-style: none;  /* IE */
+            scrollbar-width: none;
+            -ms-overflow-style: none;
         }
 
-        /* WebKit (Chrome, Safari, etc.) */
         html::-webkit-scrollbar,
         body::-webkit-scrollbar {
             display: none;
         }
 
         header {
-            padding: 2.5rem 2rem; /* Increased padding */
+            padding: 2.5rem 2rem;
             border-bottom: 1px solid #222;
             z-index: 10;
-            
-            /* --- UPDATED FOR LOGO REMOVAL --- */
             display: flex;
-            justify-content: center; /* Center the h1 */
+            justify-content: center;
             align-items: center;
-            position: relative; 
-            text-align: center; /* Ensure title is centered */
+            position: relative;
+            text-align: center;
         }
-
-        /* --- Logo styles removed --- */
 
         h1 {
             font-size: 1.5rem;
@@ -56,175 +46,168 @@
             margin: 0;
         }
         
-        /* This container will hold the PDF viewer */
         .pdf-container {
-            flex-grow: 1; /* Make it fill all available space */
+            flex-grow: 1;
             width: 100%;
-            height: 100%; /* Fallback for older browsers */
-            overflow-y: auto; /* Allow this container to scroll */
-
-            /* --- HIDE SCROLLBAR (Local) --- */
+            height: 100%;
+            overflow-y: auto;
             scrollbar-width: none;
-            -ms-overflow-style: none;  
+            -ms-overflow-style: none;
         }
 
-        /* WebKit (Chrome, Safari, etc.) */
         .pdf-container::-webkit-scrollbar {
             display: none;
         }
 
-        /* --- NEW STYLES FOR PDF.JS --- */
-        /* This is the new container for the PDF pages */
         #pdf-viewer {
             width: 100%;
             display: flex;
             flex-direction: column;
-            align-items: center; /* Center pages horizontally */
+            align-items: center;
             padding: 1rem 0;
             box-sizing: border-box;
         }
 
-        /* --- FIX FOR MOBILE CENTERING --- */
-        /* This is the wrapper for each page */
         .page-wrapper {
-            width: 90%; /* Make wrapper slightly smaller than full width */
-            max-width: 800px; /* Max width on desktop */
+            width: 90%;
+            max-width: 800px;
             margin-bottom: 1rem;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            min-height: 400px; /* Placeholder height */
+            background-color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        /* Style for each page (which will be a <canvas> element) */
         .page-wrapper canvas {
-            width: 100%; /* Make canvas fill its wrapper */
+            width: 100%;
             height: auto;
-            display: block; /* Remove any extra spacing */
+            display: block;
         }
-        /* --- END FIX --- */
 
+        .loading-placeholder {
+            color: #666;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <header>
-        <!-- Logo img tag removed -->
         <h1>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</h1>
     </header>
 
-    <!-- 2. This is where the PDF pages will be rendered -->
-    <div class="pdf-container">
+    <div class="pdf-container" id="pdf-container">
         <div id="pdf-viewer"></div>
     </div>
 
-    <!-- 3. This script loads and renders your PDF -->
     <script>
-        // Set the worker source (required by PDF.js)
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-        // Your PDF file (loading from your Cloudflare R2 bucket)
-        const url = 'https://pub-01b86a07b6904467a8a45ae0ec6c8c9e.r2.dev/TechVidya-Brochure.pdf'; 
-
-        // Get the container
+        const url = 'https://pub-01b86a07b6904467a8a45ae0ec6c8c9e.r2.dev/TechVidya-Brochure.pdf';
         const container = document.getElementById('pdf-viewer');
-        const loadingMessage = document.createElement('p');
-        loadingMessage.textContent = 'Loading Brochure...';
-        loadingMessage.style.textAlign = 'center';
-        loadingMessage.style.padding = '2rem';
-        container.appendChild(loadingMessage);
+        const scrollContainer = document.getElementById('pdf-container');
 
-        // --- Get target page from URL ---
+        // Reduced scale for faster mobile rendering
+        const SCALE = window.innerWidth < 768 ? 1.0 : 1.2;
+        
+        // Get target page from URL
         const params = new URLSearchParams(window.location.search);
-        let targetPageNum = parseInt(params.get('page'), 10);
-        if (isNaN(targetPageNum) || targetPageNum < 1) {
-            targetPageNum = 1; // Default to page 1
-        }
+        let targetPageNum = parseInt(params.get('page'), 10) || 1;
 
-        // Asynchronously load the PDF
-        const loadingTask = pdfjsLib.getDocument(url);
-        loadingTask.promise.then(function(pdf) {
-            console.log('PDF loaded successfully.');
-            loadingMessage.remove(); // Remove "Loading..." message
+        let pdfDoc = null;
+        const renderedPages = new Set();
+        const pageWrappers = [];
 
-            // Get number of pages
-            const numPages = pdf.numPages;
-            console.log('Total Pages:', numPages);
+        // IntersectionObserver for lazy loading
+        const observerOptions = {
+            root: scrollContainer,
+            rootMargin: '200px', // Start loading 200px before entering viewport
+            threshold: 0.01
+        };
 
-            if (targetPageNum > numPages) {
-                targetPageNum = numPages;
-            }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const pageNum = parseInt(entry.target.dataset.pageNum);
+                    if (!renderedPages.has(pageNum)) {
+                        renderPage(pageNum);
+                    }
+                }
+            });
+        }, observerOptions);
 
-            // --- Render pages in parallel ---
-            const pagePromises = [];
-
-            // --- Create all canvas wrappers first to maintain order ---
-            // This is the key fix: create placeholders first.
-            const canvasWrappers = [];
-            for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-                const canvasWrapper = document.createElement('div');
-                canvasWrapper.id = 'wrapper-' + pageNum;
-                canvasWrapper.className = 'page-wrapper'; // Apply styling
-                container.appendChild(canvasWrapper);
-                canvasWrappers.push(canvasWrapper);
-            }
-
-            for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-                // Create a function to handle rendering for each page
-                const renderPage = (num) => {
-                    return pdf.getPage(num).then(function(page) {
-                        console.log('Loading page', num);
-                        
-                        const scale = 1.5;
-                        const viewport = page.getViewport({ scale: scale });
-
-                        const canvas = document.createElement('canvas');
-                        canvas.id = 'page-canvas-' + num; // Add ID for jumping
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-
-                        // Add the canvas to its specific placeholder wrapper
-                        canvasWrappers[num - 1].appendChild(canvas);
-
-                        const renderContext = {
-                            canvasContext: context,
-                            viewport: viewport
-                        };
-                        
-                        return page.render(renderContext).promise.then(() => {
-                            console.log('Page', num, 'rendered');
-                            
-                            // JUMP-ON-RENDER LOGIC
-                            if (num === targetPageNum) {
-                                console.log('Scrolling to target page:', targetPageNum);
-                                // We scroll the whole container, not the canvas
-                                const pdfContainer = document.querySelector('.pdf-container');
-                                if (pdfContainer) {
-                                    // Scroll the wrapper into view
-                                    canvasWrappers[num - 1].scrollIntoView({ behavior: 'auto', block: 'start' });
-                                }
-                            }
-                        }).catch(renderErr => {
-                            console.error('Error rendering page ' + num, renderErr);
-                        });
-                    }).catch(pageErr => {
-                        console.error('Error loading page ' + num, pageErr);
-                    });
+        // Render a specific page
+        function renderPage(pageNum) {
+            if (renderedPages.has(pageNum) || !pdfDoc) return;
+            
+            renderedPages.add(pageNum);
+            
+            pdfDoc.getPage(pageNum).then(page => {
+                const viewport = page.getViewport({ scale: SCALE });
+                const wrapper = pageWrappers[pageNum - 1];
+                
+                // Remove loading placeholder
+                wrapper.innerHTML = '';
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                wrapper.appendChild(canvas);
+                
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
                 };
                 
-                pagePromises.push(renderPage(pageNum));
-            }
-            
-            // Wait for all render promises to complete
-            Promise.all(pagePromises).then(() => {
-                console.log('All pages have been processed.');
-                // --- Re-sorting logic REMOVED to prevent jump-back ---
+                page.render(renderContext).promise.then(() => {
+                    console.log('Page', pageNum, 'rendered');
+                }).catch(err => {
+                    console.error('Error rendering page', pageNum, err);
+                });
+            }).catch(err => {
+                console.error('Error loading page', pageNum, err);
             });
+        }
 
-        }).catch(function (reason) {
-            // PDF loading error
-            console.error('Error loading PDF:', reason);
-            loadingMessage.remove(); // Remove "Loading..." message
-            container.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Error loading PDF. Please try <a href="' + url + '" style="color: #87CEEB;">downloading it directly</a>.</p>';
+        // Load PDF
+        const loadingTask = pdfjsLib.getDocument(url);
+        loadingTask.promise.then(pdf => {
+            pdfDoc = pdf;
+            const numPages = pdf.numPages;
+            
+            if (targetPageNum > numPages) targetPageNum = numPages;
+
+            // Create placeholder wrappers for all pages
+            for (let i = 1; i <= numPages; i++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'page-wrapper';
+                wrapper.dataset.pageNum = i;
+                wrapper.innerHTML = '<div class="loading-placeholder">Loading page ' + i + '...</div>';
+                container.appendChild(wrapper);
+                pageWrappers.push(wrapper);
+                
+                // Observe all pages for lazy loading
+                observer.observe(wrapper);
+            }
+
+            // Render target page immediately (priority)
+            renderPage(targetPageNum);
+            
+            // Scroll to target page after a brief delay
+            setTimeout(() => {
+                pageWrappers[targetPageNum - 1].scrollIntoView({ 
+                    behavior: 'auto', 
+                    block: 'start' 
+                });
+            }, 100);
+
+        }).catch(err => {
+            console.error('Error loading PDF:', err);
+            container.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Error loading PDF.</p>';
         });
     </script>
 </body>
 </html>
-
