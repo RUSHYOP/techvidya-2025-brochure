@@ -204,17 +204,16 @@
     <div class="performance-indicator" id="performance-indicator"></div>
 
     <script>
-        // Register Service Worker for caching
+        // Register Service Worker for caching (non-blocking)
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
-                .then(registration => {
-                    console.log('Service Worker registered:', registration);
-                    // Trigger background sync for PDF prefetching
-                    if ('sync' in registration) {
-                        registration.sync.register('prefetch-pdf');
-                    }
-                })
-                .catch(error => console.log('Service Worker registration failed:', error));
+            // Delay service worker registration to not block initial load
+            setTimeout(() => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered:', registration);
+                    })
+                    .catch(error => console.log('Service Worker registration failed:', error));
+            }, 2000);
         }
 
         // Performance monitoring
@@ -254,9 +253,8 @@
         const container = document.getElementById('pdf-viewer');
         const scrollContainer = document.getElementById('pdf-container');
 
-        // Higher quality scale for QR code scanning
-        const INITIAL_SCALE = 2.0; // Increased from 1.5 for better QR code clarity
-        const QR_SCALE = 3.0; // For QR code specific rendering
+        // Balanced scale for QR code scanning and performance
+        const INITIAL_SCALE = 1.7; // Balanced between quality and performance
         
         const params = new URLSearchParams(window.location.search);
         let targetPageNum = parseInt(params.get('page'), 10) || 1;
@@ -300,24 +298,22 @@
             const pageNum = renderQueue.shift();
             await renderPage(pageNum);
             
-            // Continue processing queue with a small delay
+            // Continue processing queue with longer delay to prevent blocking
             if (renderQueue.length > 0) {
-                setTimeout(processRenderQueue, 10);
+                setTimeout(processRenderQueue, 100);
             }
         }
 
-        // Smart preloading of adjacent pages
+        // Smart preloading of adjacent pages (reduced for better performance)
         function preloadAdjacentPages(currentPage) {
             const adjacentPages = [
                 currentPage - 1,
-                currentPage + 1,
-                currentPage - 2,
-                currentPage + 2
+                currentPage + 1
             ].filter(page => page > 0 && page <= totalPages && !preloadedPages.has(page));
 
             adjacentPages.forEach(pageNum => {
                 preloadedPages.add(pageNum);
-                setTimeout(() => queuePageRender(pageNum), 100);
+                setTimeout(() => queuePageRender(pageNum), 500);
             });
         }
 
@@ -440,14 +436,8 @@
                         if (zoomHint) zoomHint.style.display = 'none';
                     }, 7000);
 
-                    // Start background rendering of remaining pages
-                    setTimeout(() => {
-                        for (let i = 1; i <= totalPages; i++) {
-                            if (!priorityPages.includes(i)) {
-                                queuePageRender(i);
-                            }
-                        }
-                    }, 1000);
+                    // Background rendering disabled for better responsiveness
+                    // Pages will render on-demand when scrolled into view
                 });
 
         }).catch(err => {
