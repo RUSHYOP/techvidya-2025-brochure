@@ -200,7 +200,7 @@
         <div id="pdf-viewer"></div>
     </div>
 
-    <div class="zoom-hint">💡 Pinch to zoom for scanning QR codes</div>
+    <div class="zoom-hint">💡 Use pinch-to-zoom or Ctrl+scroll for QR codes</div>
     <div class="performance-indicator" id="performance-indicator"></div>
 
     <script>
@@ -460,42 +460,12 @@
             }, 2000);
         });
 
-        // Add pinch-to-zoom functionality for mobile QR code scanning
-        let scale = 1;
-        let lastTouchDistance = 0;
-
-        container.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 2) {
-                lastTouchDistance = Math.hypot(
-                    e.touches[0].pageX - e.touches[1].pageX,
-                    e.touches[0].pageY - e.touches[1].pageY
-                );
-            }
-        });
-
-        container.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 2) {
-                e.preventDefault();
-                const currentDistance = Math.hypot(
-                    e.touches[0].pageX - e.touches[1].pageX,
-                    e.touches[0].pageY - e.touches[1].pageY
-                );
-                
-                if (lastTouchDistance > 0) {
-                    const scaleChange = currentDistance / lastTouchDistance;
-                    scale = Math.min(Math.max(scale * scaleChange, 0.5), 5);
-                    container.style.transform = `scale(${scale})`;
-                    container.style.transformOrigin = 'center';
-                }
-                
-                lastTouchDistance = currentDistance;
-            }
-        });
-
-        // Reset zoom on double tap
-        container.addEventListener('dblclick', () => {
-            scale = 1;
-            container.style.transform = 'scale(1)';
+        // Native browser zoom works better for QR codes without interfering with scrolling
+        // Users can use pinch-to-zoom naturally or Ctrl+scroll wheel
+        
+        // Prevent accidental zoom reset
+        container.addEventListener('dblclick', (e) => {
+            e.preventDefault();
         });
     </script>
 </body>
