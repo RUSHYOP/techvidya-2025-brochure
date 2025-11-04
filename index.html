@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</title>
     
+    <!-- Preload critical resources -->
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js" as="script">
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js" as="script">
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap" as="style">
+    
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="https://pub-01b86a07b6904467a8a45ae0ec6c8c9e.r2.dev/favicon.ico">
     
@@ -105,6 +110,75 @@
             font-size: 12px;
             z-index: 1000;
         }
+
+        .performance-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 11px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .performance-indicator.show {
+            opacity: 1;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            transition: opacity 0.5s;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            width: 0%;
+            transition: width 0.3s;
+        }
     </style>
 </head>
 <body>
@@ -112,20 +186,77 @@
         <h1>TECHVIDYA 2K25 - CHANAKYOTSAV BROCHURE</h1>
     </header>
 
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div>Loading PDF...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div id="loading-status">Initializing...</div>
+    </div>
+
     <div class="pdf-container" id="pdf-container">
         <div id="pdf-viewer"></div>
     </div>
 
     <div class="zoom-hint">💡 Pinch to zoom for scanning QR codes</div>
+    <div class="performance-indicator" id="performance-indicator"></div>
 
     <script>
+        // Register Service Worker for caching
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(registration => {
+                    console.log('Service Worker registered:', registration);
+                    // Trigger background sync for PDF prefetching
+                    if ('sync' in registration) {
+                        registration.sync.register('prefetch-pdf');
+                    }
+                })
+                .catch(error => console.log('Service Worker registration failed:', error));
+        }
+
+        // Performance monitoring
+        const perfIndicator = document.getElementById('performance-indicator');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const progressFill = document.getElementById('progress-fill');
+        const loadingStatus = document.getElementById('loading-status');
+        
+        let startTime = performance.now();
+        let pagesLoaded = 0;
+        let totalPages = 0;
+
+        function updatePerformance(message) {
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+            perfIndicator.textContent = `${message} (${elapsed}s)`;
+            perfIndicator.classList.add('show');
+            setTimeout(() => perfIndicator.classList.remove('show'), 3000);
+        }
+
+        function updateProgress(loaded, total, status) {
+            const percentage = (loaded / total) * 100;
+            progressFill.style.width = percentage + '%';
+            loadingStatus.textContent = status || `Loading... ${loaded}/${total}`;
+        }
+
+        function hideLoadingOverlay() {
+            loadingOverlay.classList.add('hidden');
+            setTimeout(() => {
+                loadingOverlay.style.display = 'none';
+            }, 500);
+        }
+
+        // PDF.js configuration
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
         const url = 'https://pub-01b86a07b6904467a8a45ae0ec6c8c9e.r2.dev/TechVidya-Brochure.pdf';
         const container = document.getElementById('pdf-viewer');
         const scrollContainer = document.getElementById('pdf-container');
 
-        const INITIAL_SCALE = 1.5; 
+        // Higher quality scale for QR code scanning
+        const INITIAL_SCALE = 2.0; // Increased from 1.5 for better QR code clarity
+        const QR_SCALE = 3.0; // For QR code specific rendering
         
         const params = new URLSearchParams(window.location.search);
         let targetPageNum = parseInt(params.get('page'), 10) || 1;
@@ -133,10 +264,13 @@
         let pdfDoc = null;
         const renderedPages = new Set();
         const pageWrappers = [];
+        const renderQueue = [];
+        const preloadedPages = new Set();
 
+        // More aggressive observer settings for better performance
         const observerOptions = {
             root: scrollContainer,
-            rootMargin: '300px',
+            rootMargin: '500px', // Increased from 300px
             threshold: 0.01
         };
 
@@ -145,27 +279,70 @@
                 if (entry.isIntersecting) {
                     const pageNum = parseInt(entry.target.dataset.pageNum);
                     if (!renderedPages.has(pageNum)) {
-                        renderPage(pageNum);
+                        queuePageRender(pageNum);
                     }
+                    // Preload adjacent pages
+                    preloadAdjacentPages(pageNum);
                 }
             });
         }, observerOptions);
 
-        function renderPage(pageNum) {
+        // Queue-based rendering to prevent blocking
+        function queuePageRender(pageNum) {
+            if (renderQueue.includes(pageNum)) return;
+            renderQueue.push(pageNum);
+            processRenderQueue();
+        }
+
+        async function processRenderQueue() {
+            if (renderQueue.length === 0) return;
+            
+            const pageNum = renderQueue.shift();
+            await renderPage(pageNum);
+            
+            // Continue processing queue with a small delay
+            if (renderQueue.length > 0) {
+                setTimeout(processRenderQueue, 10);
+            }
+        }
+
+        // Smart preloading of adjacent pages
+        function preloadAdjacentPages(currentPage) {
+            const adjacentPages = [
+                currentPage - 1,
+                currentPage + 1,
+                currentPage - 2,
+                currentPage + 2
+            ].filter(page => page > 0 && page <= totalPages && !preloadedPages.has(page));
+
+            adjacentPages.forEach(pageNum => {
+                preloadedPages.add(pageNum);
+                setTimeout(() => queuePageRender(pageNum), 100);
+            });
+        }
+
+        async function renderPage(pageNum) {
             if (renderedPages.has(pageNum) || !pdfDoc) return;
             
             renderedPages.add(pageNum);
             
-            pdfDoc.getPage(pageNum).then(page => {
-                const viewport = page.getViewport({ scale: INITIAL_SCALE });
+            try {
+                const page = await pdfDoc.getPage(pageNum);
                 const wrapper = pageWrappers[pageNum - 1];
+                
+                if (!wrapper) return;
+                
+                // Use higher scale for better QR code quality
+                const scale = INITIAL_SCALE;
+                const viewport = page.getViewport({ scale });
                 
                 wrapper.innerHTML = '';
                 
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d', { 
                     alpha: false,
-                    willReadFrequently: false
+                    willReadFrequently: false,
+                    desynchronized: true // Performance optimization
                 });
                 
                 canvas.height = viewport.height;
@@ -176,32 +353,54 @@
                 const renderContext = {
                     canvasContext: context,
                     viewport: viewport,
-                    intent: 'display'
+                    intent: 'display',
+                    enableWebGL: true // Hardware acceleration if available
                 };
                 
-                page.render(renderContext).promise.then(() => {
-                    console.log('Page', pageNum, 'rendered at high quality');
-                }).catch(err => {
-                    console.error('Error rendering page', pageNum, err);
-                });
-            }).catch(err => {
-                console.error('Error loading page', pageNum, err);
-            });
+                await page.render(renderContext).promise;
+                
+                pagesLoaded++;
+                updateProgress(renderedPages.size, totalPages, `Rendered ${renderedPages.size}/${totalPages} pages`);
+                
+                console.log(`Page ${pageNum} rendered at scale ${scale}`);
+                
+            } catch (err) {
+                console.error('Error rendering page', pageNum, err);
+            }
         }
+
+        // Initialize PDF loading with progress tracking
+        updateProgress(0, 100, 'Connecting to server...');
 
         const loadingTask = pdfjsLib.getDocument({
             url: url,
             cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/cmaps/',
-            cMapPacked: true
+            cMapPacked: true,
+            standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/standard_fonts/',
+            useSystemFonts: false,
+            disableAutoFetch: false,
+            disableStream: false
         });
+
+        // Track PDF loading progress
+        loadingTask.onProgress = function(progress) {
+            if (progress.total > 0) {
+                const percentage = (progress.loaded / progress.total) * 50; // First 50% for download
+                updateProgress(percentage, 100, `Downloading PDF... ${Math.round(percentage)}%`);
+            }
+        };
         
         loadingTask.promise.then(pdf => {
             pdfDoc = pdf;
-            const numPages = pdf.numPages;
+            totalPages = pdf.numPages;
             
-            if (targetPageNum > numPages) targetPageNum = numPages;
+            updateProgress(50, 100, 'PDF loaded, preparing pages...');
+            updatePerformance('PDF loaded successfully');
+            
+            if (targetPageNum > totalPages) targetPageNum = totalPages;
 
-            for (let i = 1; i <= numPages; i++) {
+            // Create page wrappers
+            for (let i = 1; i <= totalPages; i++) {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'page-wrapper';
                 wrapper.dataset.pageNum = i;
@@ -211,24 +410,92 @@
                 observer.observe(wrapper);
             }
 
-            renderPage(targetPageNum);
-            if (targetPageNum > 1) renderPage(targetPageNum - 1);
-            if (targetPageNum < numPages) renderPage(targetPageNum + 1);
-            
-            setTimeout(() => {
-                pageWrappers[targetPageNum - 1].scrollIntoView({ 
-                    behavior: 'auto', 
-                    block: 'start' 
-                });
-            }, 100);
+            updateProgress(75, 100, 'Initializing viewer...');
 
-            setTimeout(() => {
-                document.querySelector('.zoom-hint').style.display = 'none';
-            }, 5000);
+            // Priority rendering: target page first, then adjacent pages
+            const priorityPages = [
+                targetPageNum,
+                Math.max(1, targetPageNum - 1),
+                Math.min(totalPages, targetPageNum + 1)
+            ];
+
+            // Render priority pages immediately
+            Promise.all(priorityPages.map(pageNum => renderPage(pageNum)))
+                .then(() => {
+                    updateProgress(100, 100, 'Ready!');
+                    hideLoadingOverlay();
+                    updatePerformance('Initial pages rendered');
+
+                    // Scroll to target page
+                    setTimeout(() => {
+                        pageWrappers[targetPageNum - 1].scrollIntoView({ 
+                            behavior: 'auto', 
+                            block: 'start' 
+                        });
+                    }, 100);
+
+                    // Hide zoom hint after 7 seconds
+                    setTimeout(() => {
+                        const zoomHint = document.querySelector('.zoom-hint');
+                        if (zoomHint) zoomHint.style.display = 'none';
+                    }, 7000);
+
+                    // Start background rendering of remaining pages
+                    setTimeout(() => {
+                        for (let i = 1; i <= totalPages; i++) {
+                            if (!priorityPages.includes(i)) {
+                                queuePageRender(i);
+                            }
+                        }
+                    }, 1000);
+                });
 
         }).catch(err => {
             console.error('Error loading PDF:', err);
-            container.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Error loading PDF.</p>';
+            loadingStatus.textContent = 'Error loading PDF';
+            updatePerformance('Failed to load PDF');
+            setTimeout(() => {
+                container.innerHTML = '<p style="color: white; text-align: center; padding: 2rem;">Error loading PDF. Please refresh the page.</p>';
+                hideLoadingOverlay();
+            }, 2000);
+        });
+
+        // Add pinch-to-zoom functionality for mobile QR code scanning
+        let scale = 1;
+        let lastTouchDistance = 0;
+
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                lastTouchDistance = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+            }
+        });
+
+        container.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                const currentDistance = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                
+                if (lastTouchDistance > 0) {
+                    const scaleChange = currentDistance / lastTouchDistance;
+                    scale = Math.min(Math.max(scale * scaleChange, 0.5), 5);
+                    container.style.transform = `scale(${scale})`;
+                    container.style.transformOrigin = 'center';
+                }
+                
+                lastTouchDistance = currentDistance;
+            }
+        });
+
+        // Reset zoom on double tap
+        container.addEventListener('dblclick', () => {
+            scale = 1;
+            container.style.transform = 'scale(1)';
         });
     </script>
 </body>
